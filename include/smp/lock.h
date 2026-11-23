@@ -19,15 +19,21 @@
 /* CLH lock is FIFO lock for machines with coherent caches (coherent-FIFO lock).
  * See ftp://ftp.cs.washington.edu/tr/1993/02/UW-CSE-93-02-02.pdf */
 
-typedef enum {
-    CLHState_Granted = 0,
-    CLHState_Pending
-} clh_req_state_t;
+typedef struct clh_node {
+    word_t ticket;
+    word_t in_queue;
+    word_t ipi;
 
-/* Lock request */
-typedef struct clh_req {
-    clh_req_state_t state;
-} ALIGN(L1_CACHE_LINE_SIZE) clh_req_t;
+} ALIGN(L1_CACHE_LINE_SIZE) clh_note_t;
+
+typedef struct clh_lock {
+    word_t next;
+    word_t owner;
+    clh_node_t node[CONFIG_MAX_NUM_NODES];
+    ipi_state_t ipi;
+
+} ALIGN(EXCL_RES_GRANULE_SIZE) clh_lock_t;
+
 
 /* Our node (called "Process" in the paper) */
 typedef struct clh_node {
@@ -56,52 +62,49 @@ static inline bool_t FORCE_INLINE clh_is_ipi_pending(word_t cpu)
     return __atomic_load_n(&big_kernel_lock.node[cpu].ipi, __ATOMIC_ACQUIRE);
 }
 
-static inline void FORCE_INLINE clh_lock_acquire(bool_t irqPath)
-{
+static inline bool_t FORCE_INLINE clh_is_my_turn(word_t cpu){
+
+    return __atomic_load_n(&big_kernel_lock.owner, __ATOMIC_ACQUIRE) == big_kernel_lock.node[cpu].ticket;
+
+}
+
+static inline void FORCE_INLINE clh_lock_acquire(bool_t irqPath){
     word_t cpu = getCurrentCPUIndex();
-    clh_node_t *node = &big_kernel_lock.node[cpu];
+    clh_node_t *node = &big_kernel_lock.nedo[cpu];
 
-    /* Tell successor to wait */
-    node->myreq->state = CLHState_Pending;
-    /* Enqueue our request */
-    node->watch = __atomic_exchange_n(&big_kernel_lock.tail, node->myreq, __ATOMIC_ACQ_REL);
+    node->in_queue = 1;
 
-    /* Wait until predecessor finishes */
-    while (node->watch->state != CLHState_Granted) {
-        /* As we are in a loop we need to ensure that any loads of future iterations of the
-         * loop are performed after this one */
-        __atomic_thread_fence(__ATOMIC_ACQUIRE);
+    node->ticket = __atomic_fetch_add(&big_kernel_lock.next, 1, __ATOMIC_RELAXED);
+
+    while (!clh_is_my_turn(cpu)) {
         if (clh_is_ipi_pending(cpu)) {
-            /* we only handle irq_remote_call_ipi here as other type of IPIs
-             * are async and could be delayed. 'handleIPI' may not return
-             * based on value of the 'irqPath'. */
             handleIPI(CORE_IRQ_TO_IRQT(cpu, irq_remote_call_ipi), irqPath);
-            /* We do not need to perform a memory release here as we would have only modified
-             * local state that we do not need to make visible */
         }
+
         arch_pause();
     }
 
-    /* make sure no resource access passes from this point */
     __atomic_thread_fence(__ATOMIC_ACQUIRE);
+
+
 }
 
-static inline void FORCE_INLINE clh_lock_release(void)
-{
+
+static inline void FORCE_INLINE clh_lock_release(void){
+
     clh_node_t *node = &big_kernel_lock.node[getCurrentCPUIndex()];
 
-    /* make sure no resource access passes from this point */
     __atomic_thread_fence(__ATOMIC_RELEASE);
+    node->in_queue = 0;
+    __atomic_store_n(&big_kernel_lock.owner, node->ticket + 1, __ATOMIC_RELEASE);
 
-    /* Pass lock to successor */
-    node->myreq->state = CLHState_Granted;
-    /* Take ownership of watched request, to use next time we take the lock */
-    node->myreq = node->watch;
+
 }
+
 
 static inline bool_t FORCE_INLINE clh_is_self_in_queue(void)
 {
-    return big_kernel_lock.node[getCurrentCPUIndex()].myreq->state == CLHState_Pending;
+    return big_kernel_lock.node[getCurrentCPUIndex()].in_queue;
 }
 
 #define NODE_LOCK(_irqPath) do {                         \
