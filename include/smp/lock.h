@@ -35,24 +35,6 @@ typedef struct clh_lock {
 } ALIGN(EXCL_RES_GRANULE_SIZE) clh_lock_t;
 
 
-/* Our node (called "Process" in the paper) */
-typedef struct clh_node {
-    clh_req_t *watch; // Used by predecessor to grant the lock to us.
-    clh_req_t *myreq; // Used to grant the lock to our successor.
-    /* This is the software blocking IPI flag */
-    word_t ipi;
-} ALIGN(L1_CACHE_LINE_SIZE) clh_node_t;
-
-typedef struct clh_lock {
-    clh_req_t request[CONFIG_MAX_NUM_NODES + 1];
-    clh_node_t node[CONFIG_MAX_NUM_NODES];
-
-    clh_req_t *tail;
-
-    /* Global IPI state */
-    ipi_state_t ipi;
-} ALIGN(EXCL_RES_GRANULE_SIZE) clh_lock_t;
-
 extern clh_lock_t big_kernel_lock;
 BOOT_CODE void clh_lock_init(void);
 

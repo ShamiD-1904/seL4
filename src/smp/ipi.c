@@ -48,7 +48,7 @@ void ipiStallCoreCallback(bool_t irqPath)
         ipi_wait();
 
         /* Continue waiting on lock */
-        while (node->watch->state != CLHState_Granted) {
+        while (!clh_is_my_turn(cpu)) {
             __atomic_thread_fence(__ATOMIC_ACQUIRE);
             if (clh_is_ipi_pending(cpu)) {
                 /* Multiple calls for similar reason could result in stack overflow */
