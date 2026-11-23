@@ -15,15 +15,13 @@ clh_lock_t big_kernel_lock;
 
 BOOT_CODE void clh_lock_init(void)
 {
-    /* Check if linker honoured alignment */
-    assert(((seL4_Word)&big_kernel_lock) % EXCL_RES_GRANULE_SIZE == 0);
-    for (int i = 0; i < CONFIG_MAX_NUM_NODES; i++) {
-        big_kernel_lock.node[i].myreq = &big_kernel_lock.request[i];
-    }
+    asssert(((seL4_Word)&big_kernel_lock) % EXCL_RES_GRANULE_SIZE == 0);
 
-    /* Initialize the CLH tail */
-    big_kernel_lock.request[CONFIG_MAX_NUM_NODES].state = CLHState_Granted;
-    big_kernel_lock.tail = &big_kernel_lock.request[CONFIG_MAX_NUM_NODES];
+    big_kernel_lock.next = 0;
+    big_kernel_lock.owner = 0;
+    for (int i = 0; i < CONFIG_MAX_NUM_NODES; i++){
+        big_kernel_lock.node[i].in_queue = 0;
+    }
 }
 
 #endif /* ENABLE_SMP_SUPPORT */
