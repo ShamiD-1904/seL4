@@ -24,7 +24,7 @@ typedef struct clh_node {
     word_t in_queue;
     word_t ipi;
 
-} ALIGN(L1_CACHE_LINE_SIZE) clh_note_t;
+} ALIGN(L1_CACHE_LINE_SIZE) clh_node_t;
 
 typedef struct clh_lock {
     word_t next;
@@ -52,7 +52,7 @@ static inline bool_t FORCE_INLINE clh_is_my_turn(word_t cpu){
 
 static inline void FORCE_INLINE clh_lock_acquire(bool_t irqPath){
     word_t cpu = getCurrentCPUIndex();
-    clh_node_t *node = &big_kernel_lock.nedo[cpu];
+    clh_node_t *node = &big_kernel_lock.node[cpu];
 
     node->in_queue = 1;
 

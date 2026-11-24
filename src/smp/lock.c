@@ -15,7 +15,7 @@ clh_lock_t big_kernel_lock;
 
 BOOT_CODE void clh_lock_init(void)
 {
-    asssert(((seL4_Word)&big_kernel_lock) % EXCL_RES_GRANULE_SIZE == 0);
+    assert(((seL4_Word)&big_kernel_lock) % EXCL_RES_GRANULE_SIZE == 0);
 
     big_kernel_lock.next = 0;
     big_kernel_lock.owner = 0;
